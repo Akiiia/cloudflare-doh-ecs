@@ -15,7 +15,8 @@
 
 ## 部署
 
-点击上方 **Deploy to Cloudflare** 按钮，Cloudflare 会自动创建 Worker、KV namespace 和每日规则更新任务。
+点击上方 **Deploy to Cloudflare** 按钮，授权 Cloudflare 访问 GitHub。系统会复制项目模板，并在你的 GitHub 账户下创建一个独立的部署仓库。
+Cloudflare 会通过该仓库自动创建并部署 Worker、KV 命名空间以及每日规则更新任务。
 
 部署完成后打开详情页-域-启用
 
