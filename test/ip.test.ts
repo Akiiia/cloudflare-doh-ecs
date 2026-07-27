@@ -1,4 +1,5 @@
 import {
+  clientIpFromSingleHeader,
   clientIpFromXff,
   isGlobalUnicast,
   parseIp,
@@ -14,18 +15,31 @@ describe("IP and X-Forwarded-For handling", () => {
       bytes: Uint8Array.of(8, 8, 8, 8)
     });
     expect(clientIpFromXff("1.1.1.1, 203.1.2.3:443")?.bytes).toEqual(
-      Uint8Array.of(203, 1, 2, 3)
+      Uint8Array.of(1, 1, 1, 1)
     );
     expect(clientIpFromXff("bad, [2001:4860:4860::8888]:443")?.family).toBe(2);
   });
 
-  it("uses the rightmost syntactically valid XFF address", () => {
-    expect(clientIpFromXff("198.51.100.1, invalid, 8.8.4.4")?.bytes).toEqual(
+  it("uses the leftmost globally routable XFF address", () => {
+    expect(clientIpFromXff("1.1.1.1, invalid, 8.8.4.4")?.bytes).toEqual(
+      Uint8Array.of(1, 1, 1, 1)
+    );
+    expect(clientIpFromXff("10.0.0.1, 8.8.4.4")?.bytes).toEqual(
       Uint8Array.of(8, 8, 4, 4)
     );
     expect(clientIpFromXff("unknown, bad")).toBeNull();
     expect(clientIpFromXff(null)).toBeNull();
     expect(clientIpFromXff("x".repeat(4097))).toBeNull();
+  });
+
+  it("reads one globally routable IP from a direct client header", () => {
+    expect(clientIpFromSingleHeader(" 8.8.4.123 ")?.bytes).toEqual(
+      Uint8Array.of(8, 8, 4, 123)
+    );
+    expect(clientIpFromSingleHeader("2001:4860:4860::8888")?.family).toBe(2);
+    expect(clientIpFromSingleHeader("10.0.0.1")).toBeNull();
+    expect(clientIpFromSingleHeader("1.1.1.1, 8.8.4.4")).toBeNull();
+    expect(clientIpFromSingleHeader(null)).toBeNull();
   });
 
   it.each([

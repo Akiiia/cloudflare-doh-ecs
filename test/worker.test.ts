@@ -76,6 +76,36 @@ describe("DoH worker", () => {
     expect(destinations).toEqual(["https://dns.google/dns-query"]);
   });
 
+  it("falls back to CF-Connecting-IP when XFF has no public address", async () => {
+    const { env } = await envWithRules();
+    let forwarded = new Uint8Array();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        forwarded = new Uint8Array(init?.body as ArrayBuffer);
+        return new Response(toArrayBuffer(makeResponseFromQuery(forwarded)), {
+          headers: { "content-type": "application/dns-message" }
+        });
+      })
+    );
+    const query = makeQuery("example.net", 66);
+    const response = await handleRequest(
+      new Request(`https://worker.example/doh?dns=${base64Url(query)}`, {
+        headers: {
+          "x-forwarded-for": "10.0.0.1, 192.168.1.1",
+          "cf-connecting-ip": "8.8.4.123"
+        }
+      }),
+      env
+    );
+    const opt = parseDnsMessage(forwarded).opt;
+    const start = opt?.rdataStart ?? 0;
+    expect(response.status).toBe(200);
+    expect(Array.from(forwarded.slice(start, start + 11))).toEqual([
+      0, 8, 0, 7, 0, 1, 24, 0, 8, 8, 4
+    ]);
+  });
+
   it("returns DNS SERVFAIL after exhausting the domestic group", async () => {
     const { env } = await envWithRules();
     const calls: string[] = [];

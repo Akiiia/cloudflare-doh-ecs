@@ -52,7 +52,7 @@ https://<你的 Worker 域名>/doh
 
 ## 注意
 - 部分受限网络环境无法访问 .workers.dev 域名，需绑定自有域名或另外使用 CDN 以达到加速访问目的。
-- ECS 地址取自 `X-Forwarded-For` 请求头中最右侧的合法公网 IP，并自动掩码为 IPv4 `/24` 或 IPv6 `/56`。
+- ECS 地址优先取自 `X-Forwarded-For` 中最左侧的合法公网 IP；没有有效地址时回退到 `CF-Connecting-IP`，并自动掩码为 IPv4 `/24` 或 IPv6 `/56`。
 - 每个上游超时为 3 秒；主备均超时时，最坏等待约 6 秒。
 - 本项目不提供公共 DNS 服务的滥用防护，公开部署时建议配合 Cloudflare WAF 或限速规则。
 

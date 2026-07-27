@@ -1,7 +1,7 @@
 import { toArrayBuffer } from "./binary";
 import { buildDnsError, DnsFormatError, parseDnsMessage, validateUpstreamResponse } from "./dns";
 import { rewriteEcs } from "./ecs";
-import { clientIpFromXff, subnetForEcs } from "./ip";
+import { clientIpFromSingleHeader, clientIpFromXff, subnetForEcs } from "./ip";
 import { ensureRules, isDomesticDomain, updateRules } from "./rules";
 import { readConfig, type WorkerConfig } from "./config";
 import type { Env } from "./types";
@@ -195,7 +195,9 @@ async function handleDns(request: Request, env: Env, config: WorkerConfig): Prom
 
   let forwardedQuery: Uint8Array;
   try {
-    const ip = clientIpFromXff(request.headers.get("x-forwarded-for"));
+    const ip =
+      clientIpFromXff(request.headers.get("x-forwarded-for")) ??
+      clientIpFromSingleHeader(request.headers.get("cf-connecting-ip"));
     const subnet = subnetForEcs(ip, ECS_IPV4_PREFIX, ECS_IPV6_PREFIX);
     forwardedQuery = rewriteEcs(originalQuery, parsed, subnet);
   } catch (error) {

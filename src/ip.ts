@@ -170,13 +170,19 @@ function stripForwardedPort(token: string): string {
 export function clientIpFromXff(header: string | null): ParsedIp | null {
   if (header === null || header.length > 4096) return null;
   const values = header.split(",");
-  for (let i = values.length - 1; i >= 0; i -= 1) {
+  for (let i = 0; i < values.length; i += 1) {
     const item = values[i];
     if (item === undefined) continue;
     const parsed = parseIp(stripForwardedPort(item));
-    if (parsed !== null) return parsed;
+    if (parsed !== null && isGlobalUnicast(parsed)) return parsed;
   }
   return null;
+}
+
+export function clientIpFromSingleHeader(header: string | null): ParsedIp | null {
+  if (header === null || header.length > 64) return null;
+  const parsed = parseIp(header.trim());
+  return parsed !== null && isGlobalUnicast(parsed) ? parsed : null;
 }
 
 export function subnetForEcs(
