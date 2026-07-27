@@ -70,3 +70,7 @@ npm run deploy:dry-run
 ## 许可证
 
 MIT
+
+## 相关链接
+
+- [Linux.do 社区发布帖](https://linux.do/)：项目介绍、部署教程与交流讨论。
