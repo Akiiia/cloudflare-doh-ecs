@@ -14,6 +14,7 @@ describe("DoH worker", () => {
   beforeEach(() => {
     resetRuleCacheForTest();
     vi.restoreAllMocks();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
 
   it("routes domestic POST to AliDNS and injects ECS", async () => {
@@ -124,6 +125,11 @@ describe("DoH worker", () => {
       "https://dns.google/dns-query",
       "https://cloudflare-dns.com/dns-query"
     ]);
+    expect(console.warn).toHaveBeenCalledWith("doh_upstream_failed", {
+      group: "global",
+      role: "primary",
+      reason: "http_status_503"
+    });
     expect(readU16(new Uint8Array(await response.arrayBuffer()), 2) & 0xf).toBe(0);
   });
 
@@ -154,6 +160,11 @@ describe("DoH worker", () => {
       "https://dns.alidns.com/dns-query",
       "https://doh.pub/dns-query"
     ]);
+    expect(console.warn).toHaveBeenCalledWith("doh_upstream_failed", {
+      group: "domestic",
+      role: "primary",
+      reason: "dns_servfail"
+    });
     expect(readU16(new Uint8Array(await response.arrayBuffer()), 2) & 0xf).toBe(0);
   });
 

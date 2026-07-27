@@ -13,6 +13,28 @@ const ECS_IPV4_PREFIX = 24;
 const ECS_IPV6_PREFIX = 56;
 const DNS_CONTENT_TYPE = "application/dns-message";
 
+class UpstreamFailure extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "UpstreamFailure";
+  }
+}
+
+function upstreamFailureReason(error: unknown): string {
+  if (error instanceof UpstreamFailure) return error.reason;
+  if (error instanceof DnsFormatError) return `dns_${error.message}`;
+  return "unexpected_error";
+}
+
+function logUpstreamFailure(
+  group: "domestic" | "global",
+  role: "primary" | "fallback",
+  reason: string
+): void {
+  // 不记录查询域名、DNS 报文、客户端地址或自定义上游 URL。
+  console.warn("doh_upstream_failed", { group, role, reason });
+}
+
 function emptyResponse(status: number, extraHeaders?: HeadersInit): Response {
   const headers = new Headers(extraHeaders);
   headers.set("Cache-Control", "no-store");
@@ -95,26 +117,36 @@ async function fetchUpstream(url: string, query: Uint8Array): Promise<Uint8Array
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      redirect: "error",
-      signal: controller.signal,
-      headers: {
-        Accept: DNS_CONTENT_TYPE,
-        "Content-Type": DNS_CONTENT_TYPE
-      },
-      body: toArrayBuffer(query)
-    });
-    if (!response.ok) throw new Error("upstream_status");
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        redirect: "error",
+        signal: controller.signal,
+        headers: {
+          Accept: DNS_CONTENT_TYPE,
+          "Content-Type": DNS_CONTENT_TYPE
+        },
+        body: toArrayBuffer(query)
+      });
+    } catch {
+      throw new UpstreamFailure(controller.signal.aborted ? "timeout" : "network_error");
+    }
+    if (!response.ok) throw new UpstreamFailure(`http_status_${response.status}`);
     const type = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-    if (type !== DNS_CONTENT_TYPE) throw new Error("upstream_content_type");
+    if (type !== DNS_CONTENT_TYPE) throw new UpstreamFailure("invalid_content_type");
     const declaredLength = response.headers.get("content-length");
     if (declaredLength !== null && Number(declaredLength) > MAX_RESPONSE_BYTES) {
-      throw new Error("upstream_response_too_large");
+      throw new UpstreamFailure("response_too_large");
     }
-    const buffer = await response.arrayBuffer();
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await response.arrayBuffer();
+    } catch {
+      throw new UpstreamFailure(controller.signal.aborted ? "timeout" : "response_read_error");
+    }
     if (buffer.byteLength < 12 || buffer.byteLength > MAX_RESPONSE_BYTES) {
-      throw new Error("upstream_response_size");
+      throw new UpstreamFailure("invalid_response_size");
     }
     return new Uint8Array(buffer);
   } finally {
@@ -153,13 +185,21 @@ async function handleDns(request: Request, env: Env, config: WorkerConfig): Prom
     domestic = rules !== null && isDomesticDomain(rules, ruleName);
   }
   const upstreams = domestic ? config.domesticUrls : config.globalUrls;
+  const group = domestic ? "domestic" : "global";
+  let upstreamIndex = 0;
   for (const upstream of upstreams) {
+    const role = upstreamIndex === 0 ? "primary" : "fallback";
+    upstreamIndex += 1;
     try {
       const upstreamBody = await fetchUpstream(upstream, forwardedQuery);
       const upstreamInfo = validateUpstreamResponse(upstreamBody, parsed);
-      if ((upstreamInfo.flags & 0x000f) === 2) continue;
+      if ((upstreamInfo.flags & 0x000f) === 2) {
+        logUpstreamFailure(group, role, "dns_servfail");
+        continue;
+      }
       return dnsResponse(upstreamBody);
-    } catch {
+    } catch (error) {
+      logUpstreamFailure(group, role, upstreamFailureReason(error));
       // 仅在当前国内或国外组内尝试下一上游，不进行跨组回退。
     }
   }
