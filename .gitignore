@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+.wrangler/
+dist/
+*.log
+manual-upload/
+*.tsbuildinfo
