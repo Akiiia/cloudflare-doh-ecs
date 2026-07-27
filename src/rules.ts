@@ -378,7 +378,7 @@ export async function updateRules(
 ): Promise<RuleUpdateResult> {
   const response = await fetcher(RULES_URL, {
     method: "GET",
-    redirect: "error",
+    redirect: "manual",
     headers: {
       Accept: "text/plain, application/octet-stream;q=0.9"
     }

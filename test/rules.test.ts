@@ -75,12 +75,15 @@ describe("byte-level rules", () => {
       status: 200,
       headers: { "content-type": "text/plain" }
     });
-    const fetcher = vi.fn(async () => response.clone());
+    const fetcher = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) =>
+      response.clone()
+    );
     const result = await updateRules(
       { RULES_KV: kv.asBinding() },
       fetcher as unknown as typeof fetch
     );
     expect(result).toBe("updated");
+    expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe("manual");
     const manifest = JSON.parse(kv.values.get("rules:active") as string) as RuleManifest;
     const stored = kv.values.get(manifest.active);
     expect(stored).toBeInstanceOf(ArrayBuffer);

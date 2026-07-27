@@ -21,11 +21,13 @@ describe("DoH worker", () => {
     const { env } = await envWithRules();
     let destination = "";
     let forwarded = new Uint8Array();
+    let redirect: RequestRedirect | undefined;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         destination = String(input);
         forwarded = new Uint8Array(init?.body as ArrayBuffer);
+        redirect = init?.redirect;
         return new Response(toArrayBuffer(makeResponseFromQuery(forwarded)), {
           headers: { "content-type": "application/dns-message" }
         });
@@ -45,6 +47,7 @@ describe("DoH worker", () => {
     );
     expect(response.status).toBe(200);
     expect(destination).toBe("https://dns.alidns.com/dns-query");
+    expect(redirect).toBe("manual");
     expect(parseDnsMessage(forwarded).opt).not.toBeNull();
     expect(response.headers.get("cache-control")).toBe("no-store");
   });

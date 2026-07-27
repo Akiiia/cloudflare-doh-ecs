@@ -142,7 +142,7 @@ async function fetchUpstream(url: string, query: Uint8Array): Promise<Uint8Array
     try {
       response = await fetch(url, {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         signal: controller.signal,
         headers: {
           Accept: DNS_CONTENT_TYPE,
