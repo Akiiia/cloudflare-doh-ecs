@@ -80,7 +80,7 @@ describe("DoH worker", () => {
       "fetch",
       vi.fn(async (input: string | URL | Request) => {
         calls.push(String(input));
-        return new Response(null, { status: 503 });
+        throw new TypeError("request to https://private.example/secret failed");
       })
     );
     const response = await handleRequest(
@@ -97,6 +97,12 @@ describe("DoH worker", () => {
       "https://dns.alidns.com/dns-query",
       "https://doh.pub/dns-query"
     ]);
+    expect(console.warn).toHaveBeenNthCalledWith(1, "doh_upstream_failed", {
+      group: "domestic",
+      role: "primary",
+      reason: "network_error",
+      detail: "TypeError: request to [url] failed"
+    });
   });
 
   it("falls back from Google to Cloudflare without crossing groups", async () => {

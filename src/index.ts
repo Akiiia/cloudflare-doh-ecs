@@ -14,25 +14,46 @@ const ECS_IPV6_PREFIX = 56;
 const DNS_CONTENT_TYPE = "application/dns-message";
 
 class UpstreamFailure extends Error {
-  constructor(readonly reason: string) {
+  constructor(
+    readonly reason: string,
+    readonly detail?: string
+  ) {
     super(reason);
     this.name = "UpstreamFailure";
   }
 }
 
-function upstreamFailureReason(error: unknown): string {
-  if (error instanceof UpstreamFailure) return error.reason;
-  if (error instanceof DnsFormatError) return `dns_${error.message}`;
-  return "unexpected_error";
+interface UpstreamFailureDiagnostic {
+  reason: string;
+  detail?: string;
+}
+
+function safeFetchErrorDetail(error: unknown): string {
+  if (!(error instanceof Error)) return `non_error:${typeof error}`;
+  return `${error.name}: ${error.message}`
+    .replace(/https:\/\/[^\s"'<>]+/gi, "[url]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
+function upstreamFailureDiagnostic(error: unknown): UpstreamFailureDiagnostic {
+  if (error instanceof UpstreamFailure) {
+    return error.detail === undefined
+      ? { reason: error.reason }
+      : { reason: error.reason, detail: error.detail };
+  }
+  if (error instanceof DnsFormatError) return { reason: `dns_${error.message}` };
+  return { reason: "unexpected_error" };
 }
 
 function logUpstreamFailure(
   group: "domestic" | "global",
   role: "primary" | "fallback",
-  reason: string
+  diagnostic: UpstreamFailureDiagnostic
 ): void {
   // 不记录查询域名、DNS 报文、客户端地址或自定义上游 URL。
-  console.warn("doh_upstream_failed", { group, role, reason });
+  console.warn("doh_upstream_failed", { group, role, ...diagnostic });
 }
 
 function emptyResponse(status: number, extraHeaders?: HeadersInit): Response {
@@ -129,8 +150,11 @@ async function fetchUpstream(url: string, query: Uint8Array): Promise<Uint8Array
         },
         body: toArrayBuffer(query)
       });
-    } catch {
-      throw new UpstreamFailure(controller.signal.aborted ? "timeout" : "network_error");
+    } catch (error) {
+      throw new UpstreamFailure(
+        controller.signal.aborted ? "timeout" : "network_error",
+        safeFetchErrorDetail(error)
+      );
     }
     if (!response.ok) throw new UpstreamFailure(`http_status_${response.status}`);
     const type = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
@@ -142,8 +166,11 @@ async function fetchUpstream(url: string, query: Uint8Array): Promise<Uint8Array
     let buffer: ArrayBuffer;
     try {
       buffer = await response.arrayBuffer();
-    } catch {
-      throw new UpstreamFailure(controller.signal.aborted ? "timeout" : "response_read_error");
+    } catch (error) {
+      throw new UpstreamFailure(
+        controller.signal.aborted ? "timeout" : "response_read_error",
+        safeFetchErrorDetail(error)
+      );
     }
     if (buffer.byteLength < 12 || buffer.byteLength > MAX_RESPONSE_BYTES) {
       throw new UpstreamFailure("invalid_response_size");
@@ -194,12 +221,12 @@ async function handleDns(request: Request, env: Env, config: WorkerConfig): Prom
       const upstreamBody = await fetchUpstream(upstream, forwardedQuery);
       const upstreamInfo = validateUpstreamResponse(upstreamBody, parsed);
       if ((upstreamInfo.flags & 0x000f) === 2) {
-        logUpstreamFailure(group, role, "dns_servfail");
+        logUpstreamFailure(group, role, { reason: "dns_servfail" });
         continue;
       }
       return dnsResponse(upstreamBody);
     } catch (error) {
-      logUpstreamFailure(group, role, upstreamFailureReason(error));
+      logUpstreamFailure(group, role, upstreamFailureDiagnostic(error));
       // 仅在当前国内或国外组内尝试下一上游，不进行跨组回退。
     }
   }
