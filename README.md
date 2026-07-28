@@ -4,6 +4,10 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Akiiia/cloudflare-doh-ecs)
 
+## 相关链接
+
+- [LINUX DO 社区发布帖](https://linux.do/t/topic/2665830)：项目介绍、部署教程与交流讨论。
+
 ## 功能
 
 - 支持 RFC 8484 DoH GET 和 POST 请求
@@ -71,6 +75,4 @@ npm run deploy:dry-run
 
 MIT
 
-## 相关链接
 
-- [LINUX DO 社区发布帖](https://linux.do/t/topic/2665830)：项目介绍、部署教程与交流讨论。
