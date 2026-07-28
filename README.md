@@ -73,4 +73,4 @@ MIT
 
 ## 相关链接
 
-- [Linux.do 社区发布帖](https://linux.do/)：项目介绍、部署教程与交流讨论。
+- [LINUX DO 社区发布帖](https://linux.do/t/topic/2665830)：项目介绍、部署教程与交流讨论。
